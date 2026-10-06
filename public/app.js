@@ -1,0 +1,20 @@
+const START="2026-10-05";let data={people:[],entries:[]},selected=1,view=new Date("2026-10-05T00:00:00Z"),picked=null;
+const $=id=>document.getElementById(id); const people=()=>data.people;
+function today(){return new Date().toISOString().slice(0,10)}
+function key(d){return d.toISOString().slice(0,10)}
+function fmt(d){return d.toLocaleDateString(undefined,{month:"long",year:"numeric",timeZone:"UTC"})}
+async function load(){const r=await fetch("/api/data");if(!r.ok)throw Error();data=await r.json();render()}
+function entry(id,date){return data.entries.find(e=>Number(e.member_id)===id&&String(e.sober_date).slice(0,10)===date)}
+function render(){renderSelect();renderLegend();renderCalendar();renderBoard();renderStats()}
+function renderSelect(){const s=$("person");s.innerHTML=people().map(p=>`<option value="${p.id}">${p.name}</option>`).join("");s.value=selected;s.onchange=()=>{selected=+s.value;renderCalendar();renderBoard();renderStats()}}
+function renderLegend(){$("legend").innerHTML=people().map(p=>`<span><i class="dot" style="background:${p.color}"></i>${p.name}</span>`).join("")}
+function renderStats(){const p=people().find(x=>x.id===selected);$("myStats").textContent=p?`🔥 ${p.currentStreak} day current streak · 🏅 ${p.longestStreak} longest · ${p.soberDays} sober days`:""}
+function renderCalendar(){const y=view.getUTCFullYear(),m=view.getUTCMonth();$("month").textContent=fmt(view);const first=new Date(Date.UTC(y,m,1)),days=new Date(Date.UTC(y,m+1,0)).getUTCDate(),lead=first.getUTCDay();let html="";for(let i=0;i<lead;i++)html+=`<div class="day outside"></div>`;for(let n=1;n<=days;n++){const d=new Date(Date.UTC(y,m,n)),k=key(d),valid=k>=START&&k<=today(), mine=entry(selected,k);const dots=people().map(p=>{const e=entry(p.id,k);return e?.status==="drank"?`<i class="dot" style="background:${p.color}" title="${p.name} drank"></i>`:""}).join("");html+=`<div class="day ${!valid?"outside":""}" data-date="${k}"><span class="num">${n}</span>${mine?`<span class="myMark">${mine.status==="sober"?"✓":"×"}</span>`:""}<div class="drankDots">${dots}</div></div>`} $("calendar").innerHTML=html;document.querySelectorAll(".day[data-date]").forEach(el=>{if(!el.classList.contains("outside"))el.onclick=()=>openModal(el.dataset.date)})}
+function renderBoard(){const arr=[...people()].sort((a,b)=>b.soberDays-a.soberDays||b.currentStreak-a.currentStreak);$("leaderboard").innerHTML=arr.map((p,i)=>`<div class="rank"><div class="place">${i===0?"🏆":i===1?"🥈":i===2?"🥉":i+1}</div><div class="name"><span class="dot" style="background:${p.color}"></span> ${p.name}<div class="small">🔥 ${p.currentStreak} current · 🏅 ${p.longestStreak} best</div></div><div class="score">${p.soberDays}<div class="small">days</div></div></div>`).join("")}
+function openModal(date){if(date<START||date>today())return;picked=date;$("dialogDate").textContent=new Date(date+"T00:00:00Z").toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric",timeZone:"UTC"});$("modal").classList.remove("hidden")}
+$("close").onclick=()=>{$("modal").classList.add("hidden")};
+async function setStatus(status){const r=await fetch("/api/set-status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memberId:selected,date:picked,status})});if(!r.ok)alert("Could not save that status.");else{await load();$("modal").classList.add("hidden")}}
+async function clearStatus(){const r=await fetch("/api/clear-status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memberId:selected,date:picked})});if(!r.ok)alert("Could not clear that status.");else{await load();$("modal").classList.add("hidden")}}
+$("sober").onclick=()=>setStatus("sober");$("drank").onclick=()=>setStatus("drank");$("clear").onclick=clearStatus;
+$("prev").onclick=()=>{view.setUTCMonth(view.getUTCMonth()-1);renderCalendar()};$("next").onclick=()=>{view.setUTCMonth(view.getUTCMonth()+1);renderCalendar()};
+load().catch(()=>{document.body.innerHTML="<main><h1>Oops.</h1><p>Could not load Sober Streaks.</p></main>"});
